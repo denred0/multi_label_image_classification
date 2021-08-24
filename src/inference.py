@@ -240,7 +240,7 @@ print('conf_of_TP_total', round(conf_of_TP_total, 3))
 
 with open(Path('inference').joinpath('log.txt'), 'w') as f:
     f.write("%s\n" % '[image_name, gt_classes, pred_classes, precision, recall, f1, conf_of_TP]')
-    f.write(
-        "%s\n" % f'[all_images, [], [], {round(precision_total, 3)}, {round(recall_total, 3)}, {round(f1_total, 3)}, {round(conf_of_TP_total, 3)}]')
+    f.write("%s\n" % f'[all_images, [], [], {round(precision_total, 3)}, {round(recall_total, 3)}, '
+                 f'{round(f1_total, 3)}, {round(conf_of_TP_total, 3)}, min_conf={min_conf}]')
     for item in log_info:
         f.write("%s\n" % item)
