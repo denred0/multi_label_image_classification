@@ -1,3 +1,8 @@
+from warnings import simplefilter
+
+simplefilter(action='ignore', category=DeprecationWarning)
+simplefilter(action='ignore', category=UserWarning)
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -20,6 +25,8 @@ import seaborn as sns
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
+from sklearn.metrics import precision_score, recall_score, f1_score
+
 import timm
 
 import torch.optim as optim
@@ -30,25 +37,21 @@ from sklearn.metrics import precision_score, f1_score
 
 from dataset_wrapper import MyDataset
 
-classLabels = ["picture", "pushed", "wrinkle", "break_defect"]
-
+# classLabels = ["picture", "pushed", "wrinkle", "break_defect"]
+classLabels = ["risunok", "nadav", "morshiny", "izlom"]
 picture = []
 pushed = []
 wrinkle = []
 break_defect = []
 
-classLabels_dict = {1: "picture", 2: "pushed", 3: "wrinkle", 4: "break_defect"}
-
-image_ext = 'png'
+classLabels_dict = {1: "risunok", 2: "nadav", 3: "morshiny", 4: "izlom"}
 
 images_dir = 'data/prepare_data/images_masks/output/images'
 
-train_images_dir = 'data/prepare_data/images_masks/output/images'
-if not os.path.exists(train_images_dir):
-    os.makedirs(train_images_dir)
-
-images = get_all_files_in_folder(Path('data/prepare_data/images_masks/input/images'), ['*.' + image_ext])
-masks = get_all_files_in_folder(Path('data/prepare_data/images_masks/input/masks'), ['*.' + image_ext])
+dirpath = Path('inference')
+if dirpath.exists() and dirpath.is_dir():
+    shutil.rmtree(dirpath)
+Path(dirpath).mkdir(parents=True, exist_ok=True)
 
 augments = A.Compose([
     # A.Rotate(limit=30, p=0.5),
@@ -69,14 +72,8 @@ transformsA = A.Compose([A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.2
                          ToTensorV2()])
 
 batch_size = 1
-
-dataset_train = MyDataset('data/prepare_data/images_masks/output/data_train.csv', Path(images_dir), augments,
-                          transformsA)
 dataset_valid = MyDataset('data/prepare_data/images_masks/output/data_valid.csv', Path(images_dir), None, transformsA)
-
-print(f"trainset len {len(dataset_train)} valset len {len(dataset_valid)}")
-dataloader = {"train": DataLoader(dataset_train, shuffle=True, batch_size=batch_size),
-              "val": DataLoader(dataset_valid, shuffle=False, batch_size=batch_size)}
+dataloader = DataLoader(dataset_valid, shuffle=False, batch_size=batch_size)
 
 # different networks
 # sheduller step = epoch
@@ -157,22 +154,19 @@ def denormalize(image):
     return image.numpy()
 
 
-# image, label = next(iter(dataloader["val"]))
-# image = image.to(device)
-# label = label.to(device)
-# output = 0
-# with torch.no_grad():
-#     output = model(image)
-# output = torch.sigmoid(output)
-
-# output = output > 0.3
-
 mean, std = torch.tensor([0.485, 0.456, 0.406]), torch.tensor([0.229, 0.224, 0.225])
 
-min_conf = 0.3
-counter = 0
+min_conf = 0.5
+# counter = 0
 
-for image, labels in (dataloader["val"]):
+conf_of_TP_sum = 0
+precision_sum = 0
+recall_sum = 0
+f1_sum = 0
+
+log_info = []
+
+for i, (image, labels) in tqdm(enumerate(dataloader), total=len(dataloader.dataset)):
     image = image.to(device)
     label = labels.to(device)
     output = 0
@@ -182,46 +176,71 @@ for image, labels in (dataloader["val"]):
     output = output.cpu().detach().numpy()[0]
 
     image = (denormalize(image[0]) * 255).astype(int)
-    cv2.imwrite('inference/' + str(counter) + '.png', image)
-    image_draw = cv2.imread('inference/' + str(counter) + '.png', cv2.IMREAD_COLOR)
+
+    image_name = dataloader.dataset.df['image'][i]
+
+    cv2.imwrite('inference/' + image_name, image)
+    image_draw = cv2.imread('inference/' + image_name, cv2.IMREAD_COLOR)
 
     # image_draw = image.copy()
 
     classes_gt = np.array(classLabels)[np.array(labels[0].tolist(), dtype=np.bool)]
+    classes_gt_metrics = [int(x) for x in labels[0].tolist()]
 
     classes_pred = {}
-    for i, conf in enumerate(output):
+    classes_pred_metrics = [0] * len(labels[0].tolist())
+    conf_of_TP_list = []
+    for j, conf in enumerate(output):
         if conf >= min_conf:
-            classes_pred[classLabels[i]] = round(conf, 2)
+            classes_pred[classLabels[j]] = round(conf, 2)
+            classes_pred_metrics[j] = 1
+
+            if classes_pred_metrics[j] == classes_gt_metrics[j] == 1:
+                conf_of_TP_list.append(round(conf, 2))
+
+    # calc metrics
+    precision = precision_score(classes_gt_metrics, classes_pred_metrics, zero_division=1)
+    recall = recall_score(classes_gt_metrics, classes_pred_metrics)
+    f1 = f1_score(classes_gt_metrics, classes_pred_metrics)
+
+    conf_of_TP = 0
+    if len(conf_of_TP_list) != 0:
+        conf_of_TP = sum(conf_of_TP_list) / len(conf_of_TP_list)
+
+    precision_sum += precision
+    recall_sum += recall
+    f1_sum += f1
+    conf_of_TP_sum += conf_of_TP
+
+    log_info.append(
+        [image_name, classes_gt.tolist(), list(classes_pred.keys()), round(precision, 3), round(recall, 3),
+         round(f1, 3),
+         round(conf_of_TP, 3)])
 
     classes_pred = {k: v for k, v in sorted(classes_pred.items(), key=lambda item: item[1], reverse=True)}
 
     for pos, gt in enumerate(classes_gt):
-        cv2.putText(image_draw, gt, (20, (pos + 1) * 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        cv2.putText(image_draw, gt, (20, (pos + 1) * 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
 
     for pos, (cl, pr) in enumerate(classes_pred.items()):
-        cv2.putText(image_draw, str(cl) + ' ' + str(pr), (300, (pos + 1) * 30), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 0, 0), 2)
+        cv2.putText(image_draw, str(cl) + ' ' + str(pr), (200, (pos + 1) * 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7,
+                    (255, 0, 0), 2)
 
-    cv2.imwrite('inference/' + str(counter) + '.png', image_draw)
+    cv2.imwrite('inference/' + image_name, image_draw)
 
-    counter += 1
+precision_total = precision_sum / len(dataloader.dataset)
+recall_total = recall_sum / len(dataloader.dataset)
+f1_total = f1_sum / len(dataloader.dataset)
+conf_of_TP_total = conf_of_TP_sum / len(dataloader.dataset)
 
+print('precision_total', round(precision_total, 3))
+print('recall_total', round(recall_total, 3))
+print('f1_total', round(f1_total, 3))
+print('conf_of_TP_total', round(conf_of_TP_total, 3))
 
-# def visualize(image, actual, pred):
-#     fig, ax = plt.subplots()
-#     ax.imshow(denormalize(image))
-#     ax.grid(False)
-#     classes = np.array(classLabels)[np.array(actual, dtype=np.bool)]
-#     for i, s in enumerate(classes):
-#         ax.text(0, i * 20, s, verticalalignment='top', color="green", fontsize=16, weight='bold')
-#
-#     classes = np.array(classLabels)[np.array(pred, dtype=np.bool)]
-#     for i, s in enumerate(classes):
-#         ax.text(360, i * 20, s, verticalalignment='top', color="red", fontsize=16, weight='bold')
-#
-#     plt.show()
-#     plt.savefig('inference/foo.png')
-#
-#
-# for i in range(batch_size):
-#     visualize(image[i], label[i].tolist(), output[i].tolist())
+with open(Path('inference').joinpath('log.txt'), 'w') as f:
+    f.write("%s\n" % '[image_name, gt_classes, pred_classes, precision, recall, f1, conf_of_TP]')
+    f.write(
+        "%s\n" % f'[all_images, [], [], {round(precision_total, 3)}, {round(recall_total, 3)}, {round(f1_total, 3)}, {round(conf_of_TP_total, 3)}]')
+    for item in log_info:
+        f.write("%s\n" % item)

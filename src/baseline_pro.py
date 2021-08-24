@@ -30,7 +30,8 @@ from sklearn.metrics import precision_score, f1_score
 
 from dataset_wrapper import MyDataset
 
-classLabels = ["picture", "pushed", "wrinkle", "break_defect"]
+# classLabels = ["picture", "pushed", "wrinkle", "break_defect"]
+classLabels = ["risunok", "nadav", "morshiny", "izlom"]
 
 picture = []
 pushed = []
