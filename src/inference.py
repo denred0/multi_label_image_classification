@@ -53,21 +53,6 @@ if dirpath.exists() and dirpath.is_dir():
     shutil.rmtree(dirpath)
 Path(dirpath).mkdir(parents=True, exist_ok=True)
 
-augments = A.Compose([
-    # A.Rotate(limit=30, p=0.5),
-    A.HorizontalFlip(p=0.5),
-    A.VerticalFlip(p=0.5),
-    A.Transpose(p=0.3),
-    # A.GaussNoise(p=0.4),
-    # A.OneOf([A.MotionBlur(p=0.5),
-    #          A.MedianBlur(blur_limit=3, p=0.5),
-    #          A.Blur(blur_limit=3, p=0.1)], p=0.5),
-    # A.OneOf([A.CLAHE(clip_limit=2),
-    #          A.Sharpen(),
-    #          A.Emboss(),
-    #          A.RandomBrightnessContrast()], p=0.5)
-])
-
 transformsA = A.Compose([A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
                          ToTensorV2()])
 
@@ -159,12 +144,16 @@ mean, std = torch.tensor([0.485, 0.456, 0.406]), torch.tensor([0.229, 0.224, 0.2
 min_conf = 0.5
 # counter = 0
 
-conf_of_TP_sum = 0
-precision_sum = 0
-recall_sum = 0
-f1_sum = 0
+conf_of_TP_list = []
+precision_list = []
+recall_list = []
+f1_list = []
+images_names = []
 
-log_info = []
+link_start_number = 99325
+folder_link = 'https://nxc.videomatrix.ru:8899/s/iB7PwygMbiQgPgq'
+link = 'https://nxc.videomatrix.ru:8899/s/iB7PwygMbiQgPgq?dir=undefined&openfile='
+links = []
 
 for i, (image, labels) in tqdm(enumerate(dataloader), total=len(dataloader.dataset)):
     image = image.to(device)
@@ -178,25 +167,26 @@ for i, (image, labels) in tqdm(enumerate(dataloader), total=len(dataloader.datas
     image = (denormalize(image[0]) * 255).astype(int)
 
     image_name = dataloader.dataset.df['image'][i]
+    images_names.append(image_name)
 
+    # resave image because of strange OpenCV error
     cv2.imwrite('inference/' + image_name, image)
     image_draw = cv2.imread('inference/' + image_name, cv2.IMREAD_COLOR)
-
-    # image_draw = image.copy()
 
     classes_gt = np.array(classLabels)[np.array(labels[0].tolist(), dtype=np.bool)]
     classes_gt_metrics = [int(x) for x in labels[0].tolist()]
 
     classes_pred = {}
     classes_pred_metrics = [0] * len(labels[0].tolist())
-    conf_of_TP_list = []
+    conf_of_TP_l = []
     for j, conf in enumerate(output):
         if conf >= min_conf:
             classes_pred[classLabels[j]] = round(conf, 2)
             classes_pred_metrics[j] = 1
 
+            # calc confidence of TP
             if classes_pred_metrics[j] == classes_gt_metrics[j] == 1:
-                conf_of_TP_list.append(round(conf, 2))
+                conf_of_TP_l.append(round(conf, 3))
 
     # calc metrics
     precision = precision_score(classes_gt_metrics, classes_pred_metrics, zero_division=1)
@@ -204,19 +194,15 @@ for i, (image, labels) in tqdm(enumerate(dataloader), total=len(dataloader.datas
     f1 = f1_score(classes_gt_metrics, classes_pred_metrics)
 
     conf_of_TP = 0
-    if len(conf_of_TP_list) != 0:
-        conf_of_TP = sum(conf_of_TP_list) / len(conf_of_TP_list)
+    if len(conf_of_TP_l) != 0:
+        conf_of_TP = sum(conf_of_TP_l) / len(conf_of_TP_l)
 
-    precision_sum += precision
-    recall_sum += recall
-    f1_sum += f1
-    conf_of_TP_sum += conf_of_TP
+    precision_list.append(round(precision * 100, 1))
+    recall_list.append(round(recall * 100, 1))
+    f1_list.append(round(f1 * 100, 1))
+    conf_of_TP_list.append(round(conf_of_TP * 100, 1))
 
-    log_info.append(
-        [image_name, classes_gt.tolist(), list(classes_pred.keys()), round(precision, 3), round(recall, 3),
-         round(f1, 3),
-         round(conf_of_TP, 3)])
-
+    # draw results on image
     classes_pred = {k: v for k, v in sorted(classes_pred.items(), key=lambda item: item[1], reverse=True)}
 
     for pos, gt in enumerate(classes_gt):
@@ -228,19 +214,30 @@ for i, (image, labels) in tqdm(enumerate(dataloader), total=len(dataloader.datas
 
     cv2.imwrite('inference/' + image_name, image_draw)
 
-precision_total = precision_sum / len(dataloader.dataset)
-recall_total = recall_sum / len(dataloader.dataset)
-f1_total = f1_sum / len(dataloader.dataset)
-conf_of_TP_total = conf_of_TP_sum / len(dataloader.dataset)
+    links.append(link + str(link_start_number))
+    link_start_number += 1
+
+precision_total = sum(precision_list) / len(precision_list)
+recall_total = sum(recall_list) / len(recall_list)
+f1_total = sum(f1_list) / len(f1_list)
+conf_of_TP_total = sum(conf_of_TP_list) / len(conf_of_TP_list)
 
 print('precision_total', round(precision_total, 3))
 print('recall_total', round(recall_total, 3))
 print('f1_total', round(f1_total, 3))
 print('conf_of_TP_total', round(conf_of_TP_total, 3))
 
-with open(Path('inference').joinpath('log.txt'), 'w') as f:
-    f.write("%s\n" % '[image_name, gt_classes, pred_classes, precision, recall, f1, conf_of_TP]')
-    f.write("%s\n" % f'[all_images, [], [], {round(precision_total, 3)}, {round(recall_total, 3)}, '
-                 f'{round(f1_total, 3)}, {round(conf_of_TP_total, 3)}, min_conf={min_conf}]')
-    for item in log_info:
-        f.write("%s\n" % item)
+with open(Path('inference').joinpath('Общие_результаты.txt'), 'w') as f:
+    f.write("%s\n" % f'Количество изображений: {len(precision_list)}')
+    f.write("%s\n" % f'Общая точность (precision): {round(precision_total, 1)}%')
+    f.write("%s\n" % f'Общая полнота (recall): {round(precision_total, 1)}%')
+    f.write("%s\n" % f'F1-мера (F1): {round(f1_total, 1)}%')
+    f.write("%s\n" % f'Уверенность правильно найденных классов (TP): {round(conf_of_TP_total, 1)}%')
+    f.write("%s\n" % f'Пороговая уверенность: {min_conf * 100}%')
+    f.write("%s\n" % '')
+    f.write("%s\n" % f'Папка с изображениями: {folder_link}')
+
+df = pd.DataFrame(list(zip(images_names, precision_list, recall_list, f1_list, conf_of_TP_list, links)),
+                  columns=['Изображение', 'Точность', 'Полнота', 'F1-мера', 'Уверенность правильно найденных классов',
+                           'Ссылка на изображение'])
+df.to_csv('inference/Изображения_результаты.csv', index=False)
