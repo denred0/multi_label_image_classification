@@ -84,8 +84,8 @@ num_features = model.fc.in_features
 
 
 # freeze the entire convolution base
-for param in model.parameters():
-    param.requires_grad_(False)
+# for param in model.parameters():
+#     param.requires_grad_(False)
 
 
 def create_head(num_features, number_classes, dropout_prob=0.5, activation_func=nn.ReLU):
@@ -122,7 +122,7 @@ optimizer = optim.Adam(model.parameters(), lr=0.001)
 scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.999, verbose=False)
 
 best_chkp = [chkp for chkp in os.listdir('logs/' + exp_name) if chkp.startswith("best_")]
-checkpoint = torch.load(Path('logs/resnet152d_ExponentialLR/best_resnet152d_ExponentialLR_0.8716_0.2878_e10.pt'))
+checkpoint = torch.load(Path('logs/resnet152d_ExponentialLR_new/best_resnet152d_ExponentialLR_new_0.888_0.1689_e29.pt'))
 model.load_state_dict(checkpoint['model_state_dict'])
 optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 epoch = checkpoint['epoch']
@@ -141,7 +141,7 @@ def denormalize(image):
 
 mean, std = torch.tensor([0.485, 0.456, 0.406]), torch.tensor([0.229, 0.224, 0.225])
 
-min_conf = 0.5
+min_conf = 0.4
 # counter = 0
 
 conf_of_TP_list = []

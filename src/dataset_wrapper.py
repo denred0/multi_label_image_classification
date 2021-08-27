@@ -19,7 +19,6 @@ class MyDataset(Dataset):
         d = self.df.iloc[idx]
         image = cv2.imread(str(self.img_dir / d.image), cv2.IMREAD_COLOR)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        # image = Image.open(self.img_dir / d.image).convert("RGB")
         label = torch.tensor(d[1:].tolist(), dtype=torch.float32)
 
         if self.augments:

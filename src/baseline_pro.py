@@ -84,8 +84,6 @@ if create_labels:
                     if cl_name == 'break_defect':
                         break_defect[i] = 1
 
-    # for l in
-
     pd.set_option('display.max_columns', None)
     pd.set_option('display.max_rows', None)
 
@@ -134,63 +132,6 @@ def visualization():
 # visualization()
 
 
-augments = A.Compose([
-    # A.Rotate(limit=30, p=0.5),
-    A.HorizontalFlip(p=0.5),
-    A.VerticalFlip(p=0.5),
-    A.Transpose(p=0.3),
-    # A.GaussNoise(p=0.4),
-    # A.OneOf([A.MotionBlur(p=0.5),
-    #          A.MedianBlur(blur_limit=3, p=0.5),
-    #          A.Blur(blur_limit=3, p=0.1)], p=0.5),
-    # A.OneOf([A.CLAHE(clip_limit=2),
-    #          A.Sharpen(),
-    #          A.Emboss(),
-    #          A.RandomBrightnessContrast()], p=0.5)
-])
-
-transformsA = A.Compose([A.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-                         ToTensorV2()])
-
-batch_size = 8
-
-dataset_train = MyDataset('data/prepare_data/images_masks/output/data_train.csv', Path(images_dir), augments,
-                          transformsA)
-dataset_valid = MyDataset('data/prepare_data/images_masks/output/data_valid.csv', Path(images_dir), None, transformsA)
-
-print(f"trainset len {len(dataset_train)} valset len {len(dataset_valid)}")
-dataloader = {"train": DataLoader(dataset_train, shuffle=True, batch_size=batch_size),
-              "val": DataLoader(dataset_valid, shuffle=False, batch_size=batch_size)}
-
-# different networks
-# sheduller step = epoch
-# different Shedullerrs
-# loss function
-# change initial lr
-
-
-# model_type = 'tf_efficientnet_b6_ns'
-# model = timm.create_model(model_type, pretrained=True)
-# num_features = model.classifier.in_features
-# model.classifier = nn.Linear(num_features, len(classLabels_dict.keys()))
-
-model_type = 'tf_efficientnet_b4'
-model = timm.create_model(model_type, pretrained=True)
-# num_features = model.fc.in_features
-# num_features = model.last_linear.in_features
-num_features = model.classifier.in_features
-# model.classifier = nn.Linear(num_features, len(classLabels_dict.keys()))
-
-# model = models.resnet152(pretrained=True)  # load the pretrained model
-# num_features = model.fc.in_features  # get the no of on_features in last Linear unit
-# print(num_features)
-
-
-# freeze the entire convolution base
-for param in model.parameters():
-    param.requires_grad_(False)
-
-
 def create_head(num_features, number_classes, dropout_prob=0.5, activation_func=nn.ReLU):
     features_lst = [num_features, num_features // 2, num_features // 4]
     layers = []
@@ -204,16 +145,40 @@ def create_head(num_features, number_classes, dropout_prob=0.5, activation_func=
     return nn.Sequential(*layers)
 
 
-top_head = create_head(num_features, len(classLabels))  # because ten classes
-# model.fc = top_head  # replace the fully connected layer
-model.classifier = top_head  # replace the fully connected layer
-# model.last_linear = top_head  # replace the fully connected layer
-
-# print(model)
-
-exp_name = model_type + '_aug_ExponentialLR'
+model_type = 'resnet152d'
+exp_name = model_type + '_ExponentialLR_new'
 if not os.path.exists('logs/' + exp_name):
     os.makedirs('logs/' + exp_name)
+
+lr = 0.0005
+batch_size = 8
+epochs = 30
+input_size = 512
+mean = [0.485, 0.456, 0.406]
+std = [0.229, 0.224, 0.225]
+# mean = [0.5, 0.5, 0.5]
+# std = [0.5, 0.5, 0.5]
+
+model = timm.create_model(model_type, pretrained=True)
+conf = model.default_cfg
+
+last_linear = conf['classifier']
+
+# for param in model.parameters():
+#     param.requires_grad_(False)
+
+if last_linear == 'fc':
+    num_features = model.fc.in_features
+    top_head = create_head(num_features, len(classLabels))
+    model.fc = top_head
+elif last_linear == 'classifier':
+    num_features = model.classifier.in_features
+    top_head = create_head(num_features, len(classLabels))
+    model.classifier = top_head
+elif last_linear == 'last_linear':
+    num_features = model.last_linear.in_features
+    top_head = create_head(num_features, len(classLabels))
+    model.last_linear = top_head
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = model.to(device)
@@ -221,9 +186,49 @@ model = model.to(device)
 criterion = nn.BCEWithLogitsLoss()
 
 # specify optimizer
-optimizer = optim.Adam(model.parameters(), lr=0.001)
+optimizer = optim.Adam(model.parameters(), lr=lr)
 # scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=5, eta_min=0.005)
 scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.999, verbose=False)
+
+augments = A.Compose([
+    A.RandomRotate90(p=0.5),
+    A.HorizontalFlip(p=0.5),
+    A.VerticalFlip(p=0.5),
+    A.Transpose(p=0.3),
+    # A.GaussNoise(p=0.4),
+    # A.OneOf([A.MotionBlur(p=0.5),
+    #          A.MedianBlur(blur_limit=3, p=0.5),
+    #          A.Blur(blur_limit=3, p=0.1)], p=0.5),
+    # A.OneOf([A.CLAHE(clip_limit=2),
+    #          A.Sharpen(),
+    #          A.Emboss(),
+    #          A.RandomBrightnessContrast()], p=0.5)
+], p=0.7)
+
+transformsA = A.Compose([A.Resize(input_size, input_size),
+                         A.Normalize(mean=mean, std=std),
+                         ToTensorV2()])
+
+dataset_train = MyDataset('data/prepare_data/images_masks/output/data_train.csv', Path(images_dir), augments,
+                          transformsA)
+dataset_valid = MyDataset('data/prepare_data/images_masks/output/data_valid.csv', Path(images_dir), None, transformsA)
+
+print(f"trainset len {len(dataset_train)} valset len {len(dataset_valid)}")
+dataloader = {"train": DataLoader(dataset_train, shuffle=True, batch_size=batch_size),
+              "val": DataLoader(dataset_valid, shuffle=False, batch_size=batch_size)}
+
+
+# different networks
+# sheduller step = epoch
+# different Shedullerrs
+# loss function
+# change initial lr
+
+
+# model_type = 'tf_efficientnet_b6_ns'
+# model = timm.create_model(model_type, pretrained=True)
+# num_features = model.classifier.in_features
+# model.classifier = nn.Linear(num_features, len(classLabels_dict.keys()))
 
 
 def create_checkpoint(model, epoch, filename, exp_name, type):
@@ -245,6 +250,12 @@ def create_checkpoint(model, epoch, filename, exp_name, type):
             os.remove('logs/' + exp_name + '/' + old_last[0])
 
     torch.save(checkpoint, 'logs/' + exp_name + '/' + filename)
+
+
+train_acc = []
+val_acc = []
+train_loss = []
+val_loss = []
 
 
 def train(model, data_loader, criterion, optimizer, scheduler, num_epochs=5):
@@ -282,8 +293,8 @@ def train(model, data_loader, criterion, optimizer, scheduler, num_epochs=5):
                         # update the model parameters
                         optimizer.step()
 
-                        if phase == "train":  # put the model in training mode
-                            scheduler.step()
+                        # if phase == "train":
+                        #     scheduler.step()
 
                         # zero the grad to stop it from accumulating
                         optimizer.zero_grad()
@@ -291,16 +302,25 @@ def train(model, data_loader, criterion, optimizer, scheduler, num_epochs=5):
                 # statistics
                 running_loss += loss.item() * data.size(0)
                 running_corrects += f1_score(target.to("cpu").to(torch.int).numpy(),
-                                             preds.to("cpu").to(torch.int).numpy(), average="samples") * data.size(0)
+                                             preds.to("cpu").to(torch.int).numpy(), average="samples",
+                                             zero_division=1) * data.size(0)
 
             epoch_loss = running_loss / len(data_loader[phase].dataset)
             epoch_acc = running_corrects / len(data_loader[phase].dataset)
 
             result.append('{} Loss: {:.4f} Acc: {:.4f}'.format(phase, epoch_loss, epoch_acc))
 
+            if phase == "train":  # put the model in training mode
+                scheduler.step()
+                train_acc.append(epoch_acc)
+                train_loss.append(epoch_loss)
+
             # save checkpoint
             if phase == "val":
                 print(result)
+
+                val_acc.append(epoch_acc)
+                val_loss.append(epoch_loss)
 
                 checkpoint_name = f'{exp_name}_{round(epoch_acc, 4)}_{round(epoch_loss, 4)}_e{epoch}.pt'
                 if epoch_loss < min_loss or epoch_acc > max_acc:
@@ -311,52 +331,68 @@ def train(model, data_loader, criterion, optimizer, scheduler, num_epochs=5):
                 create_checkpoint(model, epoch, 'last_' + checkpoint_name, exp_name, 'last')
 
 
-train(model, dataloader, criterion, optimizer, scheduler, num_epochs=30)
+train(model, dataloader, criterion, optimizer, scheduler, num_epochs=epochs)
 
-best_chkp = [chkp for chkp in os.listdir('logs/' + exp_name) if chkp.startswith("best_")]
-checkpoint = torch.load(Path('logs/' + exp_name + '/' + best_chkp[0]))
-model.load_state_dict(checkpoint['model_state_dict'])
-optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-epoch = checkpoint['epoch']
-batch_size = checkpoint['batch_size']
+epochs = range(1, len(train_acc) + 1)
+
+plt.plot(epochs, train_acc, 'bo', label='Training acc')
+plt.plot(epochs, val_acc, 'b', label='Validation acc')
+plt.title('Training and validation accuracy')
+plt.legend()
+
+plt.figure()
+
+plt.plot(epochs, train_loss, 'bo', label='Training loss')
+plt.plot(epochs, val_loss, 'b', label='Validation loss')
+plt.title('Training and validation loss')
+plt.legend()
+
+plt.show()
+
+# best_chkp = [chkp for chkp in os.listdir('logs/' + exp_name) if chkp.startswith("best_")]
+# checkpoint = torch.load(Path('logs/' + exp_name + '/' + best_chkp[0]))
+# model.load_state_dict(checkpoint['model_state_dict'])
+# optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+# epoch = checkpoint['epoch']
+# batch_size = checkpoint['batch_size']
+# #
+# model.eval()  ## or model.train()
 #
-model.eval()  ## or model.train()
-
-image, label = next(iter(dataloader["val"]))
-image = image.to(device)
-label = label.to(device)
-output = 0
-with torch.no_grad():
-    output = model(image)
-output = torch.sigmoid(output)
-
-output = output > 0.3
-
-mean, std = torch.tensor([0.485, 0.456, 0.406]), torch.tensor([0.229, 0.224, 0.225])
-
-
-def denormalize(image):
-    image = image.to("cpu").clone().detach()
-    image = transforms.Normalize(-mean / std, 1 / std)(image)  # denormalize
-    image = image.permute(1, 2, 0)
-    image = torch.clamp(image, 0, 1)
-    return image.numpy()
-
-
-def visualize(image, actual, pred):
-    fig, ax = plt.subplots()
-    ax.imshow(denormalize(image))
-    ax.grid(False)
-    classes = np.array(classLabels)[np.array(actual, dtype=np.bool)]
-    for i, s in enumerate(classes):
-        ax.text(0, i * 20, s, verticalalignment='top', color="green", fontsize=16, weight='bold')
-
-    classes = np.array(classLabels)[np.array(pred, dtype=np.bool)]
-    for i, s in enumerate(classes):
-        ax.text(360, i * 20, s, verticalalignment='top', color="red", fontsize=16, weight='bold')
-
-    plt.show()
-
-
-for i in range(batch_size):
-    visualize(image[i], label[i].tolist(), output[i].tolist())
+# image, label = next(iter(dataloader["val"]))
+# image = image.to(device)
+# label = label.to(device)
+# output = 0
+# with torch.no_grad():
+#     output = model(image)
+# output = torch.sigmoid(output)
+#
+# output = output > 0.3
+#
+# mean, std = torch.tensor([0.485, 0.456, 0.406]), torch.tensor([0.229, 0.224, 0.225])
+#
+#
+# def denormalize(image):
+#     image = image.to("cpu").clone().detach()
+#     image = transforms.Normalize(-mean / std, 1 / std)(image)  # denormalize
+#     image = image.permute(1, 2, 0)
+#     image = torch.clamp(image, 0, 1)
+#     return image.numpy()
+#
+#
+# def visualize(image, actual, pred):
+#     fig, ax = plt.subplots()
+#     ax.imshow(denormalize(image))
+#     ax.grid(False)
+#     classes = np.array(classLabels)[np.array(actual, dtype=np.bool)]
+#     for i, s in enumerate(classes):
+#         ax.text(0, i * 20, s, verticalalignment='top', color="green", fontsize=16, weight='bold')
+#
+#     classes = np.array(classLabels)[np.array(pred, dtype=np.bool)]
+#     for i, s in enumerate(classes):
+#         ax.text(360, i * 20, s, verticalalignment='top', color="red", fontsize=16, weight='bold')
+#
+#     plt.show()
+#
+#
+# for i in range(batch_size):
+#     visualize(image[i], label[i].tolist(), output[i].tolist())
