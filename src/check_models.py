@@ -2,12 +2,12 @@ import timm
 from pprint import pprint
 from tqdm import tqdm
 
-# model_names = timm.list_models(pretrained=True)
+model_names = timm.list_models(pretrained=True)
 
 # model_names = timm.list_models('*eff*')
 
 
-# pprint(model_names)
+pprint(model_names)
 # for i, model in tqdm(enumerate(model_names)):
 #     # model = 'cait_m36_384'
 #     if i > 275:
@@ -15,9 +15,9 @@ from tqdm import tqdm
 #     # pprint(m.default_cfg)
 
 
-model = 'inception_v4'
+model = 'resnet152d'
 m = timm.create_model(model, pretrained=True)
-# print(m)
+print(m)
 
 
 pprint(m.default_cfg)

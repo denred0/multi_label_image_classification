@@ -5,23 +5,15 @@ simplefilter(action='ignore', category=UserWarning)
 
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 import torch
-import os
 
 import shutil
 import cv2
-# from scipy.stats import triang_gen
 from torch import nn
-import torch.nn.functional as F
 from torchvision import datasets, models, transforms
-import json
 from torch.utils.data import Dataset, DataLoader, random_split
-from PIL import Image
 from pathlib import Path
-from my_utils import get_all_files_in_folder
 from tqdm import tqdm
-import seaborn as sns
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
@@ -76,6 +68,8 @@ model_type = 'resnet152d'
 model = timm.create_model(model_type, pretrained=True)
 
 num_features = model.fc.in_features
+
+
 # model.classifier = nn.Linear(num_features, len(classLabels_dict.keys()))
 
 # model = models.resnet152(pretrained=True)  # load the pretrained model
@@ -108,9 +102,9 @@ model.fc = top_head  # replace the fully connected layer
 
 # print(model)
 
-exp_name = model_type + '_aug_ExponentialLR'
-if not os.path.exists('logs/' + exp_name):
-    os.makedirs('logs/' + exp_name)
+# exp_name = model_type + '_aug_ExponentialLR'
+# if not os.path.exists('logs/' + exp_name):
+#     os.makedirs('logs/' + exp_name)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = model.to(device)
@@ -121,8 +115,10 @@ criterion = nn.BCEWithLogitsLoss()
 optimizer = optim.Adam(model.parameters(), lr=0.001)
 scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.999, verbose=False)
 
-best_chkp = [chkp for chkp in os.listdir('logs/' + exp_name) if chkp.startswith("best_")]
-checkpoint = torch.load(Path('logs/resnet152d_ExponentialLR_new/best_resnet152d_ExponentialLR_new_0.888_0.1689_e29.pt'))
+# best_chkp = [chkp for chkp in os.listdir('logs/' + exp_name) if chkp.startswith("best_")]
+checkpoint = torch.load(
+    Path(
+        'logs/resnet152d_ExponentialLR_new_aug_batch_8_lr_0.0003/best_resnet152d_ExponentialLR_new_aug_batch_8_lr_0.0003_0.9392_0.1001_e59.pt'))
 model.load_state_dict(checkpoint['model_state_dict'])
 optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 epoch = checkpoint['epoch']

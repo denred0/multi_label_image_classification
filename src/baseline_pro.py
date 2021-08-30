@@ -1,3 +1,7 @@
+import warnings
+
+warnings.simplefilter(action='ignore', category=FutureWarning)
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -6,11 +10,7 @@ import os
 
 import shutil
 import cv2
-# from scipy.stats import triang_gen
 from torch import nn
-import torch.nn.functional as F
-from torchvision import datasets, models, transforms
-import json
 from torch.utils.data import Dataset, DataLoader, random_split
 from PIL import Image
 from pathlib import Path
@@ -146,18 +146,19 @@ def create_head(num_features, number_classes, dropout_prob=0.5, activation_func=
 
 
 model_type = 'resnet152d'
-exp_name = model_type + '_ExponentialLR_new'
-if not os.path.exists('logs/' + exp_name):
-    os.makedirs('logs/' + exp_name)
 
-lr = 0.0005
+lr = 0.0003
 batch_size = 8
-epochs = 30
+epochs = 60
 input_size = 512
 mean = [0.485, 0.456, 0.406]
 std = [0.229, 0.224, 0.225]
 # mean = [0.5, 0.5, 0.5]
 # std = [0.5, 0.5, 0.5]
+
+exp_name = model_type + '_ExponentialLR_new_aug_' + 'batch_' + str(batch_size) + '_lr_' + str(lr)
+if not os.path.exists('logs/' + exp_name):
+    os.makedirs('logs/' + exp_name)
 
 model = timm.create_model(model_type, pretrained=True)
 conf = model.default_cfg
@@ -179,6 +180,10 @@ elif last_linear == 'last_linear':
     num_features = model.last_linear.in_features
     top_head = create_head(num_features, len(classLabels))
     model.last_linear = top_head
+elif last_linear == 'head':
+    num_features = model.head.in_features
+    top_head = create_head(num_features, len(classLabels))
+    model.head = top_head
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model = model.to(device)
@@ -195,11 +200,20 @@ augments = A.Compose([
     A.HorizontalFlip(p=0.5),
     A.VerticalFlip(p=0.5),
     A.Transpose(p=0.3),
+    A.Flip(p=0.5),
+    A.CLAHE(clip_limit=4, p=0.3),
+    A.RandomBrightnessContrast(p=0.5),
+    A.Emboss(p=0.5),
+    A.Sharpen(p=0.5),
+    A.GridDistortion(p=0.5),
+    A.ImageCompression(quality_lower=85, p=0.5),
+    A.Superpixels(p=0.5)
+
     # A.GaussNoise(p=0.4),
     # A.OneOf([A.MotionBlur(p=0.5),
     #          A.MedianBlur(blur_limit=3, p=0.5),
     #          A.Blur(blur_limit=3, p=0.1)], p=0.5),
-    # A.OneOf([A.CLAHE(clip_limit=2),
+    # A.OneOf([A.CLAHE(clip_limit=4),
     #          A.Sharpen(),
     #          A.Emboss(),
     #          A.RandomBrightnessContrast()], p=0.5)
