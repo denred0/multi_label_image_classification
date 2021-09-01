@@ -74,14 +74,20 @@ for img in all_images:
 df_train = pd.DataFrame(list(zip(images_list, picture, pushed, wrinkle, break_defect)),
                         columns=['image', 'picture', 'pushed', 'wrinkle', 'break_defect'])
 
-df_valid = pd.DataFrame(columns=df_train.columns)
+df_valid_test = pd.DataFrame(columns=df_train.columns)
 
 for index, row in df_train.iterrows():
-    if index % 10 == 0:
-        df_valid = df_valid.append(row, ignore_index=True)
+    if index % 5 == 0:
+        df_valid_test = df_valid_test.append(row, ignore_index=True)
         df_train.drop(index, inplace=True)
+
+df_valid = df_valid_test.iloc[:len(df_valid_test) // 2]
+df_test = df_valid_test.iloc[len(df_valid_test) // 2:]
 
 df_train.to_csv('data/create_labels/output/data_train.csv', index=None)
 df_valid.to_csv('data/create_labels/output/data_valid.csv', index=None)
+df_test.to_csv('data/create_labels/output/data_test.csv', index=None)
+
+
 
 print()

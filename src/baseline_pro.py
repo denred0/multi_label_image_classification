@@ -149,14 +149,14 @@ model_type = 'resnet152d'
 
 lr = 0.0003
 batch_size = 8
-epochs = 60
+epochs = 80
 input_size = 512
 mean = [0.485, 0.456, 0.406]
 std = [0.229, 0.224, 0.225]
 # mean = [0.5, 0.5, 0.5]
 # std = [0.5, 0.5, 0.5]
 
-exp_name = model_type + '_ExponentialLR_new_aug_' + 'batch_' + str(batch_size) + '_lr_' + str(lr)
+exp_name = model_type + '_ExponentialLR_new_aug_new_dataset_testset3_e80_' + 'batch_' + str(batch_size) + '_lr_' + str(lr)
 if not os.path.exists('logs/' + exp_name):
     os.makedirs('logs/' + exp_name)
 
@@ -223,9 +223,9 @@ transformsA = A.Compose([A.Resize(input_size, input_size),
                          A.Normalize(mean=mean, std=std),
                          ToTensorV2()])
 
-dataset_train = MyDataset('data/prepare_data/images_masks/output/data_train.csv', Path(images_dir), augments,
+dataset_train = MyDataset('data/train_data/data_train.csv', Path(images_dir), augments,
                           transformsA)
-dataset_valid = MyDataset('data/prepare_data/images_masks/output/data_valid.csv', Path(images_dir), None, transformsA)
+dataset_valid = MyDataset('data/train_data/data_valid.csv', Path(images_dir), None, transformsA)
 
 print(f"trainset len {len(dataset_train)} valset len {len(dataset_valid)}")
 dataloader = {"train": DataLoader(dataset_train, shuffle=True, batch_size=batch_size),
