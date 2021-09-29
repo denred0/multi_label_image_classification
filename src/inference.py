@@ -89,7 +89,7 @@ scheduler = lr_scheduler.ExponentialLR(optimizer, gamma=0.999, verbose=False)
 # best_chkp = [chkp for chkp in os.listdir('logs/' + exp_name) if chkp.startswith("best_")]
 checkpoint = torch.load(
     Path(
-        'logs/resnet152d_ExponentialLR_new_aug_new_dataset_testset3_e80_batch_8_lr_0.0003/best_resnet152d_ExponentialLR_new_aug_new_dataset_testset3_e80_batch_8_lr_0.0003_0.9699_0.0888_e71.pt'))
+        'logs/resnet152d_ExponentialLR_new_aug_new_dataset_testset3_e80_batch_8_lr_0.0002/best_resnet152d_ExponentialLR_new_aug_new_dataset_testset3_e80_batch_8_lr_0.0002_0.9768_0.0609_e78.pt'))
 model.load_state_dict(checkpoint['model_state_dict'])
 optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
 epoch = checkpoint['epoch']
@@ -107,7 +107,7 @@ def denormalize(image):
 
 mean, std = torch.tensor([0.485, 0.456, 0.406]), torch.tensor([0.229, 0.224, 0.225])
 
-min_conf = 0.35
+min_conf = 0.4
 # counter = 0
 
 conf_of_TP_list = []

@@ -2,8 +2,7 @@ import albumentations as A
 import cv2
 import numpy as np
 
-image = cv2.imread('data/albumentations/20210118_8f4c14ab-cc54-454c-92aa-9b57a207aeba_241108_2_002_laser.png',
-                   cv2.IMREAD_COLOR)
+image = cv2.imread('data/albumentations/stone5.jpg', cv2.IMREAD_COLOR)
 
 # resize to square
 h, w = image.shape[:2]
